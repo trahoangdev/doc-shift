@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = "http://localhost:8000";
 
@@ -12,6 +12,12 @@ export default function App() {
   const [jobId, setJobId] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const downloadUrl = useMemo(() => {
+    if (!jobId || status !== "completed") return "";
+    return `${API_BASE}/api/jobs/${jobId}/download`;
+  }, [jobId, status]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -46,6 +52,7 @@ export default function App() {
     const data = await response.json();
     setJobId(data.job_id);
     setStatus("queued");
+    setToast({ type: "info", message: "Job queued. Processing..." });
   };
 
   const refreshStatus = async () => {
@@ -57,10 +64,38 @@ export default function App() {
     }
     const data = await response.json();
     setStatus(data.status);
+    if (data.status === "completed") {
+      setToast({ type: "success", message: "Conversion completed." });
+    } else if (data.status === "failed") {
+      setToast({ type: "error", message: data.error || "Conversion failed." });
+    }
   };
+
+  useEffect(() => {
+    if (!jobId) return;
+    if (status !== "queued" && status !== "running") return;
+    const interval = setInterval(() => {
+      refreshStatus();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [jobId, status]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   return (
     <div className="page">
+      {toast ? (
+        <div className={`toast ${toast.type}`}>
+          <span>{toast.message}</span>
+          <button type="button" onClick={() => setToast(null)}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <header>
         <h1>DocShift</h1>
         <p>Convert documents while keeping layout intact.</p>
@@ -120,6 +155,11 @@ export default function App() {
           <h2>Job status</h2>
           <p>Status: {status}</p>
           <p>Job ID: {jobId || "-"}</p>
+          {downloadUrl ? (
+            <a className="download" href={downloadUrl}>
+              Download result
+            </a>
+          ) : null}
           <button type="button" onClick={refreshStatus} disabled={!jobId}>
             Refresh
           </button>
