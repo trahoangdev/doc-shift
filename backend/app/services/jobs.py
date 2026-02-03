@@ -42,14 +42,22 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 input_path TEXT,
                 output_path TEXT,
-                error TEXT
+                error TEXT,
+                webhook_url TEXT
             )
             """
         )
         _ensure_columns(
             conn,
             "jobs",
-            ["input_path", "keep_layout", "quality", "embed_fonts", "image_resolution"],
+            [
+                "input_path",
+                "keep_layout",
+                "quality",
+                "embed_fonts",
+                "image_resolution",
+                "webhook_url",
+            ],
         )
 
 
@@ -75,6 +83,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         input_path=row["input_path"],
         output_path=row["output_path"],
         error=row["error"],
+        webhook_url=row["webhook_url"],
     )
 
 
@@ -85,6 +94,7 @@ def create_job(
     quality: str,
     embed_fonts: bool,
     image_resolution: int | None,
+    webhook_url: str | None,
 ) -> Job:
     job_id = uuid4().hex
     now = _utc_now().isoformat()
@@ -99,12 +109,13 @@ def create_job(
                 quality,
                 embed_fonts,
                 image_resolution,
+                webhook_url,
                 status,
                 created_at,
                 updated_at,
                 input_path
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
@@ -114,6 +125,7 @@ def create_job(
                 quality,
                 1 if embed_fonts else 0,
                 image_resolution,
+                webhook_url,
                 "queued",
                 now,
                 now,

@@ -18,6 +18,7 @@ class Job(BaseModel):
     input_path: str | None = None
     output_path: str | None = None
     error: str | None = None
+    webhook_url: str | None = None
 
 
 class JobCreateResponse(BaseModel):

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.services.jobs import mark_completed, mark_failed, mark_running
+from app.services.webhooks import send_webhook
 
 
 def perform_conversion(
@@ -80,5 +81,7 @@ def perform_conversion(
             shutil.move(str(produced), str(output_path_obj))
 
         mark_completed(job_id, output_path)
+        send_webhook(job_id)
     except Exception as exc:  # pragma: no cover - best effort
         mark_failed(job_id, str(exc))
+        send_webhook(job_id)

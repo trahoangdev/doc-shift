@@ -90,3 +90,23 @@ http://127.0.0.1:8000/api/jobs/<job_id>/download
 Ghi chu:
 - He thong tu dong don job cu hon 7 ngay (cleanup moi gio).
 - Tuy chon chat luong/DPI/nhung font hien tai chi ap dung cho PDF output.
+
+## 10) Webhook thong bao
+Co the gui webhook khi job hoan thanh/that bai. Gui them form field:
+- `webhook_url`: URL nhan POST JSON
+
+Payload mau:
+```
+{
+  "job_id": "...",
+  "status": "completed|failed",
+  "output_url": "http://localhost:8000/api/jobs/<id>/download",
+  "error": null,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Thong so:
+- Retry 3 lan (1s, 5s, 15s)
+- `PUBLIC_BASE_URL` co the set de tao output_url

@@ -22,6 +22,7 @@ async def create_conversion_job(
     quality: str = Form("standard"),
     embed_fonts: bool = Form(False),
     image_resolution: int | None = Form(None),
+    webhook_url: str | None = Form(None),
     file: UploadFile = File(...),
 ) -> JobCreateResponse:
     if output_format not in settings.ALLOWED_OUTPUT_FORMATS:
@@ -38,6 +39,7 @@ async def create_conversion_job(
         quality=quality,
         embed_fonts=embed_fonts,
         image_resolution=image_resolution,
+        webhook_url=webhook_url,
     )
     input_path = await save_upload(job.id, file)
     set_input_path(job.id, input_path)

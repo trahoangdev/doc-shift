@@ -12,6 +12,7 @@ class Settings:
     ALLOWED_OUTPUT_FORMATS: tuple[str, ...] = ("pdf", "docx")
     LIBREOFFICE_BINARY: str = os.getenv("LIBREOFFICE_BINARY", "")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
 
 
 def _resolve_soffice() -> str:
@@ -31,4 +32,5 @@ settings = Settings(
     ALLOWED_OUTPUT_FORMATS=settings.ALLOWED_OUTPUT_FORMATS,
     LIBREOFFICE_BINARY=_resolve_soffice(),
     REDIS_URL=settings.REDIS_URL,
+    PUBLIC_BASE_URL=settings.PUBLIC_BASE_URL,
 )
