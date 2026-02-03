@@ -8,6 +8,10 @@ class Job(BaseModel):
     id: str
     source_filename: str
     output_format: str
+    keep_layout: bool
+    quality: str
+    embed_fonts: bool
+    image_resolution: int | None = None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -24,6 +28,10 @@ class JobStatusResponse(BaseModel):
     id: str
     source_filename: str
     output_format: str
+    keep_layout: bool
+    quality: str
+    embed_fonts: bool
+    image_resolution: int | None = None
     status: str
     created_at: datetime
     updated_at: datetime

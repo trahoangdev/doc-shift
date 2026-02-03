@@ -89,3 +89,4 @@ http://127.0.0.1:8000/api/jobs/<job_id>/download
 
 Ghi chu:
 - He thong tu dong don job cu hon 7 ngay (cleanup moi gio).
+- Tuy chon chat luong/DPI/nhung font hien tai chi ap dung cho PDF output.

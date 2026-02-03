@@ -52,6 +52,13 @@ label {
   font-weight: 600;
 }
 
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
 input[type="file"],
 select {
   padding: 10px;

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
@@ -17,20 +17,44 @@ router = APIRouter()
 
 @router.post("/jobs", response_model=JobCreateResponse)
 async def create_conversion_job(
-    output_format: str,
+    output_format: str = Form(...),
+    keep_layout: bool = Form(True),
+    quality: str = Form("standard"),
+    embed_fonts: bool = Form(False),
+    image_resolution: int | None = Form(None),
     file: UploadFile = File(...),
 ) -> JobCreateResponse:
     if output_format not in settings.ALLOWED_OUTPUT_FORMATS:
         raise HTTPException(status_code=400, detail="Unsupported output format")
+    if quality not in ("standard", "high"):
+        raise HTTPException(status_code=400, detail="Unsupported quality")
+    if image_resolution not in (None, 150, 300):
+        raise HTTPException(status_code=400, detail="Unsupported image resolution")
 
-    job = create_job(source_filename=file.filename, output_format=output_format)
+    job = create_job(
+        source_filename=file.filename,
+        output_format=output_format,
+        keep_layout=keep_layout,
+        quality=quality,
+        embed_fonts=embed_fonts,
+        image_resolution=image_resolution,
+    )
     input_path = await save_upload(job.id, file)
     set_input_path(job.id, input_path)
     output_path = build_output_path(job.id, output_format)
 
     try:
         queue = get_queue()
-        queue.enqueue(perform_conversion, job.id, input_path, output_path)
+        queue.enqueue(
+            perform_conversion,
+            job.id,
+            input_path,
+            output_path,
+            keep_layout,
+            quality,
+            embed_fonts,
+            image_resolution,
+        )
     except Exception as exc:
         mark_failed(job.id, str(exc))
         raise HTTPException(status_code=500, detail="Failed to enqueue job") from exc

@@ -8,7 +8,15 @@ from app.core.config import settings
 from app.services.jobs import mark_completed, mark_failed, mark_running
 
 
-def perform_conversion(job_id: str, input_path: str, output_path: str) -> None:
+def perform_conversion(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    keep_layout: bool = True,
+    quality: str = "standard",
+    embed_fonts: bool = False,
+    image_resolution: int | None = None,
+) -> None:
     """Convert documents using LibreOffice in headless mode."""
     try:
         mark_running(job_id)
@@ -23,11 +31,29 @@ def perform_conversion(job_id: str, input_path: str, output_path: str) -> None:
         if output_path_obj.exists():
             output_path_obj.unlink()
 
+        convert_to_arg = convert_to
+        if convert_to == "pdf":
+            filter_options = []
+            if quality == "high":
+                filter_options.append("Quality=100")
+                filter_options.append("ReduceImageResolution=false")
+            else:
+                filter_options.append("Quality=80")
+                filter_options.append("ReduceImageResolution=true")
+            if image_resolution:
+                filter_options.append(f"MaxImageResolution={image_resolution}")
+            if embed_fonts:
+                filter_options.append("EmbedStandardFonts=true")
+            # keep_layout is a placeholder for future layout engines.
+            _ = keep_layout
+            if filter_options:
+                convert_to_arg = f"pdf:writer_pdf_Export:{','.join(filter_options)}"
+
         cmd = [
             settings.LIBREOFFICE_BINARY,
             "--headless",
             "--convert-to",
-            convert_to,
+            convert_to_arg,
             "--outdir",
             str(output_dir),
             str(input_path),

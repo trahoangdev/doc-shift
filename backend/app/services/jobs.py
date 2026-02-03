@@ -33,6 +33,10 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 source_filename TEXT NOT NULL,
                 output_format TEXT NOT NULL,
+                keep_layout INTEGER NOT NULL,
+                quality TEXT NOT NULL,
+                embed_fonts INTEGER NOT NULL,
+                image_resolution INTEGER,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -42,7 +46,11 @@ def init_db() -> None:
             )
             """
         )
-        _ensure_columns(conn, "jobs", ["input_path"])
+        _ensure_columns(
+            conn,
+            "jobs",
+            ["input_path", "keep_layout", "quality", "embed_fonts", "image_resolution"],
+        )
 
 
 def _ensure_columns(conn: sqlite3.Connection, table: str, columns: list[str]) -> None:
@@ -57,6 +65,10 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         id=row["id"],
         source_filename=row["source_filename"],
         output_format=row["output_format"],
+        keep_layout=bool(row["keep_layout"]) if row["keep_layout"] is not None else True,
+        quality=row["quality"] or "standard",
+        embed_fonts=bool(row["embed_fonts"]) if row["embed_fonts"] is not None else False,
+        image_resolution=row["image_resolution"],
         status=row["status"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
@@ -66,16 +78,47 @@ def _row_to_job(row: sqlite3.Row) -> Job:
     )
 
 
-def create_job(source_filename: str, output_format: str) -> Job:
+def create_job(
+    source_filename: str,
+    output_format: str,
+    keep_layout: bool,
+    quality: str,
+    embed_fonts: bool,
+    image_resolution: int | None,
+) -> Job:
     job_id = uuid4().hex
     now = _utc_now().isoformat()
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO jobs (id, source_filename, output_format, status, created_at, updated_at, input_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (
+                id,
+                source_filename,
+                output_format,
+                keep_layout,
+                quality,
+                embed_fonts,
+                image_resolution,
+                status,
+                created_at,
+                updated_at,
+                input_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (job_id, source_filename, output_format, "queued", now, now, None),
+            (
+                job_id,
+                source_filename,
+                output_format,
+                1 if keep_layout else 0,
+                quality,
+                1 if embed_fonts else 0,
+                image_resolution,
+                "queued",
+                now,
+                now,
+                None,
+            ),
         )
     return get_job(job_id)
 
