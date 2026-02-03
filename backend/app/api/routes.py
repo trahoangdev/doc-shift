@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.core.queue import get_queue
 from app.models.jobs import JobCreateResponse, JobStatusResponse
-from app.services.jobs import create_job, get_job, mark_failed
+from app.services.jobs import create_job, get_job, list_jobs, mark_failed, set_input_path
 from app.services.storage import save_upload, build_output_path
 from app.workers.convert_worker import perform_conversion
 
@@ -25,6 +25,7 @@ async def create_conversion_job(
 
     job = create_job(source_filename=file.filename, output_format=output_format)
     input_path = await save_upload(job.id, file)
+    set_input_path(job.id, input_path)
     output_path = build_output_path(job.id, output_format)
 
     try:
@@ -34,6 +35,12 @@ async def create_conversion_job(
         mark_failed(job.id, str(exc))
         raise HTTPException(status_code=500, detail="Failed to enqueue job") from exc
     return JobCreateResponse(job_id=job.id)
+
+
+@router.get("/jobs", response_model=list[JobStatusResponse])
+async def list_job_history(limit: int = 50, offset: int = 0) -> list[JobStatusResponse]:
+    jobs = list_jobs(limit=limit, offset=offset)
+    return [JobStatusResponse(**job.dict()) for job in jobs]
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)

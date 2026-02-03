@@ -86,3 +86,6 @@ http://127.0.0.1:8000/api/jobs/<job_id>/download
 - WinError 2: chua set `LIBREOFFICE_BINARY` hoac LibreOffice chua cai.
 - Worker loi SIGALRM: da fix, can restart worker sau khi pull.
 - Redis loi: dam bao port 6379 dang mo va dung `REDIS_URL`.
+
+Ghi chu:
+- He thong tu dong don job cu hon 7 ngay (cleanup moi gio).

@@ -1,10 +1,13 @@
 ﻿from __future__ import annotations
 
+import threading
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
-from app.services.jobs import init_db
+from app.services.jobs import delete_expired_jobs, init_db
 
 app = FastAPI(title="DocShift API", version="0.1.0")
 app.include_router(router, prefix="/api")
@@ -24,6 +27,21 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    _start_cleanup_thread()
+
+
+def _cleanup_loop() -> None:
+    while True:
+        try:
+            delete_expired_jobs(days=7)
+        except Exception:
+            pass
+        time.sleep(60 * 60)
+
+
+def _start_cleanup_thread() -> None:
+    thread = threading.Thread(target=_cleanup_loop, daemon=True)
+    thread.start()
 
 
 @app.get("/health")

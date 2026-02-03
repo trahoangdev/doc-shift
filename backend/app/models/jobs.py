@@ -11,6 +11,7 @@ class Job(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    input_path: str | None = None
     output_path: str | None = None
     error: str | None = None
 

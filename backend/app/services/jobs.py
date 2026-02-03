@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -36,11 +36,20 @@ def init_db() -> None:
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                input_path TEXT,
                 output_path TEXT,
                 error TEXT
             )
             """
         )
+        _ensure_columns(conn, "jobs", ["input_path"])
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: list[str]) -> None:
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for column in columns:
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:
@@ -51,6 +60,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         status=row["status"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        input_path=row["input_path"],
         output_path=row["output_path"],
         error=row["error"],
     )
@@ -62,10 +72,10 @@ def create_job(source_filename: str, output_format: str) -> Job:
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO jobs (id, source_filename, output_format, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (id, source_filename, output_format, status, created_at, updated_at, input_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (job_id, source_filename, output_format, "queued", now, now),
+            (job_id, source_filename, output_format, "queued", now, now, None),
         )
     return get_job(job_id)
 
@@ -93,9 +103,45 @@ def mark_running(job_id: str) -> None:
     _update_job(job_id, status="running")
 
 
+def set_input_path(job_id: str, input_path: str) -> None:
+    _update_job(job_id, input_path=input_path)
+
+
 def mark_completed(job_id: str, output_path: str) -> None:
     _update_job(job_id, status="completed", output_path=output_path, error=None)
 
 
 def mark_failed(job_id: str, error: str) -> None:
     _update_job(job_id, status="failed", error=error)
+
+
+def list_jobs(limit: int = 50, offset: int = 0) -> list[Job]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+    return [_row_to_job(row) for row in rows]
+
+
+def delete_expired_jobs(days: int = 7) -> int:
+    cutoff = _utc_now() - timedelta(days=days)
+    removed = 0
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, input_path, output_path, created_at FROM jobs"
+        ).fetchall()
+        for row in rows:
+            created_at = datetime.fromisoformat(row["created_at"])
+            if created_at >= cutoff:
+                continue
+            for path_value in (row["input_path"], row["output_path"]):
+                if not path_value:
+                    continue
+                try:
+                    Path(path_value).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            conn.execute("DELETE FROM jobs WHERE id = ?", (row["id"],))
+            removed += 1
+    return removed
