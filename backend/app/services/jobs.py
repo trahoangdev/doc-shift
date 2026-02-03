@@ -190,7 +190,32 @@ def delete_expired_jobs(days: int = 7) -> int:
             created_at = datetime.fromisoformat(row["created_at"])
             if created_at >= cutoff:
                 continue
-            for path_value in (row["input_path"], row["output_path"]):
+            preview_path = Path(settings.STORAGE_DIR) / f"{row['id']}_preview.png"
+            for path_value in (row["input_path"], row["output_path"], str(preview_path)):
+                if not path_value:
+                    continue
+                try:
+                    Path(path_value).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            conn.execute("DELETE FROM jobs WHERE id = ?", (row["id"],))
+            removed += 1
+    return removed
+
+
+def delete_failed_jobs(days: int = 1) -> int:
+    cutoff = _utc_now() - timedelta(days=days)
+    removed = 0
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, input_path, output_path, created_at FROM jobs WHERE status = 'failed'"
+        ).fetchall()
+        for row in rows:
+            created_at = datetime.fromisoformat(row["created_at"])
+            if created_at >= cutoff:
+                continue
+            preview_path = Path(settings.STORAGE_DIR) / f"{row['id']}_preview.png"
+            for path_value in (row["input_path"], row["output_path"], str(preview_path)):
                 if not path_value:
                     continue
                 try:

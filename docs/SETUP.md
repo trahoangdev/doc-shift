@@ -119,3 +119,7 @@ Can Poppler (pdftoppm). Neu khong trong PATH, set:
 ```powershell
 $env:POPPLER_BIN = "C:\poppler\Library\bin"
 ```
+
+## 12) Cleanup failed jobs
+- Failed jobs duoc don sau 1 ngay
+- Preview PNG duoc xoa cung luc
