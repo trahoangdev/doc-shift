@@ -18,6 +18,7 @@ from app.services.jobs import (
     get_job_stats,
     list_jobs,
     mark_failed,
+    mark_canceled,
     set_input_path,
 )
 from app.services.storage import save_upload, build_output_path
@@ -56,6 +57,13 @@ async def create_conversion_job(
     input_path = await save_upload(job.id, file)
     set_input_path(job.id, input_path)
     output_path = build_output_path(job.id, output_format)
+
+    if output_format == "docx" and Path(input_path).suffix.lower() == ".pdf":
+        if not _pdf_has_text(input_path):
+            logger.warning(
+                "pdf_scan_detected",
+                extra={"job_id": job.id, "job_output_format": output_format},
+            )
 
     try:
         queue = get_queue()
@@ -105,6 +113,17 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return JobStatusResponse(**job.dict())
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str) -> dict:
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in {"completed", "failed", "canceled"}:
+        return {"status": job.status}
+    mark_canceled(job_id)
+    return {"status": "canceled"}
 
 
 @router.get("/jobs/{job_id}/download")
@@ -185,3 +204,26 @@ def _resolve_pdftoppm() -> str | None:
         if candidate.exists():
             return str(candidate)
     return shutil.which("pdftoppm")
+
+
+def _pdf_has_text(path: str, page_limit: int = 3, min_chars: int = 50) -> bool:
+    try:
+        import pdfplumber
+    except Exception:
+        return True
+    try:
+        with pdfplumber.open(path) as pdf:
+            total_text = 0
+            total_chars = 0
+            total_images = 0
+            for page in pdf.pages[:page_limit]:
+                total_text += len((page.extract_text() or "").strip())
+                total_chars += len(page.chars or [])
+                total_images += len(page.images or [])
+            if total_text >= min_chars or total_chars >= min_chars:
+                return True
+            if total_images > 0:
+                return False
+    except Exception:
+        return True
+    return False

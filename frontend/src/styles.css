@@ -292,6 +292,11 @@ select:focus {
   color: #ff9a9a;
 }
 
+.pill.canceled {
+  background: rgba(245, 186, 91, 0.25);
+  color: #ffd199;
+}
+
 .pill.queued,
 .pill.running,
 .pill.uploading {
@@ -323,6 +328,17 @@ select:focus {
   border-radius: 999px;
   padding: 10px 16px;
   cursor: pointer;
+}
+
+.ghost.danger {
+  border-color: rgba(255, 122, 89, 0.6);
+  color: #ffb4a1;
+}
+
+.status-note {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .preview {

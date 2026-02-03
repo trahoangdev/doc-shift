@@ -52,7 +52,8 @@ export default function App() {
 
     if (!response.ok) {
       setStatus("error");
-      setError("Failed to create job");
+      const detail = await response.json().catch(() => ({}));
+      setError(detail.detail || "Failed to create job");
       return;
     }
 
@@ -76,7 +77,22 @@ export default function App() {
       setPreviewKey((value) => value + 1);
     } else if (data.status === "failed") {
       setToast({ type: "error", message: data.error || "Conversion failed." });
+    } else if (data.status === "canceled") {
+      setToast({ type: "info", message: "Job canceled." });
     }
+  };
+
+  const cancelJob = async () => {
+    if (!jobId) return;
+    const response = await fetch(`${API_BASE}/api/jobs/${jobId}/cancel`, {
+      method: "POST"
+    });
+    if (!response.ok) {
+      setToast({ type: "error", message: "Failed to cancel job." });
+      return;
+    }
+    setStatus("canceled");
+    setToast({ type: "info", message: "Job canceled." });
   };
 
   useEffect(() => {
@@ -144,7 +160,11 @@ export default function App() {
           <form onSubmit={submit} className="form">
             <label className="field full">
               <span>Choose file</span>
-              <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => setFile(e.target.files[0])}
+              />
             </label>
 
             <div className="field-row">
@@ -225,6 +245,16 @@ export default function App() {
           <button type="button" className="ghost" onClick={refreshStatus} disabled={!jobId}>
             Refresh status
           </button>
+          {jobId && (status === "queued" || status === "running") ? (
+            <button type="button" className="ghost danger" onClick={cancelJob}>
+              Cancel job
+            </button>
+          ) : null}
+          {status === "queued" || status === "running" ? (
+            <p className="status-note">
+              If processing exceeds 60s, cancel and retry with lower fidelity.
+            </p>
+          ) : null}
 
           {previewUrl ? (
             <div className="preview">
@@ -237,3 +267,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -137,3 +137,19 @@ Response mau:
 Backend ghi log JSON (stdout) voi cac truong co ban:
 - `level`, `message`, `time`, `logger`
 - `job_*` (neu co)
+
+## 15) PDF -> DOCX
+Ho tro chuyen doi PDF -> DOCX (LibreOffice). Luu y:
+- PDF scan co the mat layout, can OCR o phien ban sau.
+- Layout phuc tap co the lech.
+
+## 16) PDF -> DOCX (kiem tra text)
+He thong chi ghi log neu PDF co dau hieu la scan, khong chan job.
+
+## 17) Cancel job
+Neu job bi tre (vuot 60s), co the cancel:
+```
+POST /api/jobs/<job_id>/cancel
+```
+Trang thai se chuyen thanh `canceled` va UI se dung polling.
+
