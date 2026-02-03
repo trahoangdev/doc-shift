@@ -1,0 +1,81 @@
+﻿* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #f7f2e7, #e6e1d6 60%, #d7d0c4 100%);
+  color: #1b1b1b;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+header {
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 48px;
+  margin: 0 0 8px;
+  letter-spacing: -1px;
+}
+
+header p {
+  margin: 0;
+  font-size: 18px;
+  color: #4a473f;
+}
+
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+  display: grid;
+  gap: 16px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+input[type="file"],
+select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #c8c0b2;
+  background: #fefdfb;
+}
+
+button {
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: none;
+  background: #1b1b1b;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #9a3e2e;
+  font-weight: 600;
+}
