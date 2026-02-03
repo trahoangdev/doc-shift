@@ -1,5 +1,8 @@
 ﻿from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -98,3 +101,61 @@ async def download_result(job_id: str) -> FileResponse:
         filename=filename,
         media_type="application/octet-stream",
     )
+
+
+@router.get("/jobs/{job_id}/preview")
+async def preview_result(job_id: str) -> FileResponse:
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed")
+    if not job.output_path:
+        raise HTTPException(status_code=404, detail="Output not available")
+
+    output_path = Path(job.output_path)
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="Output file missing")
+    if output_path.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=400, detail="Preview only supported for PDF")
+
+    storage_dir = Path(settings.STORAGE_DIR)
+    preview_path = storage_dir / f"{job.id}_preview.png"
+    if preview_path.exists():
+        return FileResponse(path=str(preview_path), media_type="image/png")
+
+    pdftoppm = _resolve_pdftoppm()
+    if not pdftoppm:
+        raise HTTPException(status_code=501, detail="pdftoppm not available")
+
+    prefix = storage_dir / f"{job.id}_preview"
+    cmd = [
+        pdftoppm,
+        "-png",
+        "-f",
+        "1",
+        "-l",
+        "1",
+        str(output_path),
+        str(prefix),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail="Preview generation failed")
+
+    produced = Path(f"{prefix}-1.png")
+    if produced.exists():
+        shutil.move(str(produced), str(preview_path))
+    if not preview_path.exists():
+        raise HTTPException(status_code=500, detail="Preview not found")
+
+    return FileResponse(path=str(preview_path), media_type="image/png")
+
+
+def _resolve_pdftoppm() -> str | None:
+    if settings.POPPLER_BIN:
+        exe_name = "pdftoppm.exe" if os.name == "nt" else "pdftoppm"
+        candidate = Path(settings.POPPLER_BIN) / exe_name
+        if candidate.exists():
+            return str(candidate)
+    return shutil.which("pdftoppm")

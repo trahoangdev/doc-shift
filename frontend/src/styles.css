@@ -133,3 +133,15 @@ button:disabled {
   text-decoration: none;
   font-weight: 600;
 }
+
+.preview {
+  display: grid;
+  gap: 12px;
+}
+
+.preview img {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #d7d0c4;
+  background: #f7f2e7;
+}

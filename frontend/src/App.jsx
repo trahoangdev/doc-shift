@@ -13,11 +13,17 @@ export default function App() {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
+  const [previewKey, setPreviewKey] = useState(0);
 
   const downloadUrl = useMemo(() => {
     if (!jobId || status !== "completed") return "";
     return `${API_BASE}/api/jobs/${jobId}/download`;
   }, [jobId, status]);
+
+  const previewUrl = useMemo(() => {
+    if (!jobId || status !== "completed" || format !== "pdf") return "";
+    return `${API_BASE}/api/jobs/${jobId}/preview?ts=${previewKey}`;
+  }, [jobId, status, format, previewKey]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -27,6 +33,7 @@ export default function App() {
     }
     setError("");
     setStatus("uploading");
+    setPreviewKey(0);
 
     const form = new FormData();
     form.append("file", file);
@@ -66,6 +73,7 @@ export default function App() {
     setStatus(data.status);
     if (data.status === "completed") {
       setToast({ type: "success", message: "Conversion completed." });
+      setPreviewKey((value) => value + 1);
     } else if (data.status === "failed") {
       setToast({ type: "error", message: data.error || "Conversion failed." });
     }
@@ -159,6 +167,12 @@ export default function App() {
             <a className="download" href={downloadUrl}>
               Download result
             </a>
+          ) : null}
+          {previewUrl ? (
+            <div className="preview">
+              <h3>Preview</h3>
+              <img src={previewUrl} alt="PDF preview" />
+            </div>
           ) : null}
           <button type="button" onClick={refreshStatus} disabled={!jobId}>
             Refresh

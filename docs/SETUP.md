@@ -110,3 +110,12 @@ Payload mau:
 Thong so:
 - Retry 3 lan (1s, 5s, 15s)
 - `PUBLIC_BASE_URL` co the set de tao output_url
+
+## 11) Preview PDF
+Endpoint:
+- `GET /api/jobs/<id>/preview` (chi ho tro PDF)
+
+Can Poppler (pdftoppm). Neu khong trong PATH, set:
+```powershell
+$env:POPPLER_BIN = "C:\poppler\Library\bin"
+```
