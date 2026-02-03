@@ -225,3 +225,29 @@ def delete_failed_jobs(days: int = 1) -> int:
             conn.execute("DELETE FROM jobs WHERE id = ?", (row["id"],))
             removed += 1
     return removed
+
+
+def get_job_stats() -> dict:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) as count
+            FROM jobs
+            GROUP BY status
+            """
+        ).fetchall()
+    counts = {row["status"]: row["count"] for row in rows}
+    total = sum(counts.values())
+    completed = counts.get("completed", 0)
+    failed = counts.get("failed", 0)
+    queued = counts.get("queued", 0)
+    running = counts.get("running", 0)
+    success_rate = (completed / total) if total else 0.0
+    return {
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "queued": queued,
+        "running": running,
+        "success_rate": round(success_rate, 4),
+    }

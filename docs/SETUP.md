@@ -123,3 +123,12 @@ $env:POPPLER_BIN = "C:\poppler\Library\bin"
 ## 12) Cleanup failed jobs
 - Failed jobs duoc don sau 1 ngay
 - Preview PNG duoc xoa cung luc
+
+## 13) Thong ke co ban
+Endpoint:
+- `GET /api/stats`
+
+Response mau:
+```
+{"total": 10, "completed": 7, "failed": 2, "queued": 1, "running": 0, "success_rate": 0.7}
+```
