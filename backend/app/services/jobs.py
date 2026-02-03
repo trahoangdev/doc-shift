@@ -1,12 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+import threading
+import time
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import settings
 from app.models.jobs import Job
+from redis import Redis
 
 
 def _utc_now() -> datetime:
@@ -19,28 +23,149 @@ def _db_path() -> Path:
     return path
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_db_path())
-    conn.row_factory = sqlite3.Row
-    return conn
+_DB_LOCK = threading.Lock()
+_REDIS = None
+
+
+def _redis() -> Redis | None:
+    global _REDIS
+    if _REDIS is None:
+        try:
+            _REDIS = Redis.from_url(settings.REDIS_URL)
+        except Exception:
+            _REDIS = None
+    return _REDIS
+
+
+def _redis_key(job_id: str) -> str:
+    return f"docshift:job:{job_id}"
+
+
+def _cache_job(job: Job) -> None:
+    client = _redis()
+    if client is None:
+        return
+    data = {
+        "id": job.id,
+        "source_filename": job.source_filename,
+        "output_format": job.output_format,
+        "keep_layout": str(int(job.keep_layout)),
+        "quality": job.quality,
+        "embed_fonts": str(int(job.embed_fonts)),
+        "image_resolution": "" if job.image_resolution is None else str(job.image_resolution),
+        "status": job.status,
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat(),
+        "input_path": job.input_path or "",
+        "output_path": job.output_path or "",
+        "error": job.error or "",
+        "webhook_url": job.webhook_url or "",
+    }
+    client.hset(_redis_key(job.id), mapping=data)
+    client.expire(_redis_key(job.id), 7 * 24 * 60 * 60)
+
+
+def _job_from_cache(job_id: str) -> Job | None:
+    client = _redis()
+    if client is None:
+        return None
+    data = client.hgetall(_redis_key(job_id))
+    if not data:
+        return None
+    decode = {k.decode(): v.decode() for k, v in data.items()}
+    image_res = decode.get("image_resolution") or None
+    return Job(
+        id=decode["id"],
+        source_filename=decode["source_filename"],
+        output_format=decode["output_format"],
+        keep_layout=decode.get("keep_layout", "1") == "1",
+        quality=decode.get("quality", "standard"),
+        embed_fonts=decode.get("embed_fonts", "0") == "1",
+        image_resolution=int(image_res) if image_res else None,
+        status=decode.get("status", "queued"),
+        created_at=datetime.fromisoformat(decode["created_at"]),
+        updated_at=datetime.fromisoformat(decode["updated_at"]),
+        input_path=decode.get("input_path") or None,
+        output_path=decode.get("output_path") or None,
+        error=decode.get("error") or None,
+        webhook_url=decode.get("webhook_url") or None,
+    )
+
+
+@contextmanager
+def _with_conn() -> sqlite3.Connection:
+    last_error: Exception | None = None
+    for attempt in range(5):
+        try:
+            with _DB_LOCK:
+                conn = sqlite3.connect(_db_path(), timeout=30, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA journal_mode=DELETE")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA busy_timeout=30000")
+                try:
+                    yield conn
+                    conn.commit()
+                finally:
+                    conn.close()
+            return
+        except (sqlite3.OperationalError, PermissionError) as exc:
+            last_error = exc
+            if "WinError 32" not in str(exc):
+                raise
+            time.sleep(0.2 * (2**attempt))
+    raise last_error or RuntimeError("Failed to open database")
 
 
 def init_db() -> None:
-    with _connect() as conn:
+    with _with_conn() as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY,
                 source_filename TEXT NOT NULL,
                 output_format TEXT NOT NULL,
+                keep_layout INTEGER NOT NULL,
+                quality TEXT NOT NULL,
+                embed_fonts INTEGER NOT NULL,
+                image_resolution INTEGER,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                input_path TEXT,
                 output_path TEXT,
-                error TEXT
+                error TEXT,
+                webhook_url TEXT
             )
             """
         )
+        _ensure_columns(
+            conn,
+            "jobs",
+            [
+                "input_path",
+                "keep_layout",
+                "quality",
+                "embed_fonts",
+                "image_resolution",
+                "webhook_url",
+            ],
+        )
+
+
+def _ensure_schema() -> None:
+    try:
+        init_db()
+    except sqlite3.OperationalError:
+        # Best-effort init for concurrent startup.
+        init_db()
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: list[str]) -> None:
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for column in columns:
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:
@@ -48,49 +173,104 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         id=row["id"],
         source_filename=row["source_filename"],
         output_format=row["output_format"],
+        keep_layout=bool(row["keep_layout"]) if row["keep_layout"] is not None else True,
+        quality=row["quality"] or "standard",
+        embed_fonts=bool(row["embed_fonts"]) if row["embed_fonts"] is not None else False,
+        image_resolution=row["image_resolution"],
         status=row["status"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        input_path=row["input_path"],
         output_path=row["output_path"],
         error=row["error"],
+        webhook_url=row["webhook_url"],
     )
 
 
-def create_job(source_filename: str, output_format: str) -> Job:
+def create_job(
+    source_filename: str,
+    output_format: str,
+    keep_layout: bool,
+    quality: str,
+    embed_fonts: bool,
+    image_resolution: int | None,
+    webhook_url: str | None,
+) -> Job:
+    _ensure_schema()
     job_id = uuid4().hex
     now = _utc_now().isoformat()
-    with _connect() as conn:
+    with _with_conn() as conn:
         conn.execute(
             """
-            INSERT INTO jobs (id, source_filename, output_format, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (
+                id,
+                source_filename,
+                output_format,
+                keep_layout,
+                quality,
+                embed_fonts,
+                image_resolution,
+                webhook_url,
+                status,
+                created_at,
+                updated_at,
+                input_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (job_id, source_filename, output_format, "queued", now, now),
+            (
+                job_id,
+                source_filename,
+                output_format,
+                1 if keep_layout else 0,
+                quality,
+                1 if embed_fonts else 0,
+                image_resolution,
+                webhook_url,
+                "queued",
+                now,
+                now,
+                None,
+            ),
         )
-    return get_job(job_id)
+    job = get_job(job_id)
+    if job:
+        _cache_job(job)
+    return job
 
 
 def get_job(job_id: str) -> Job | None:
-    with _connect() as conn:
+    _ensure_schema()
+    with _with_conn() as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if row is None:
-        return None
-    return _row_to_job(row)
+        return _job_from_cache(job_id)
+    job = _row_to_job(row)
+    _cache_job(job)
+    return job
 
 
 def _update_job(job_id: str, **updates: str | None) -> None:
     if not updates:
         return
+    _ensure_schema()
     updates["updated_at"] = _utc_now().isoformat()
     columns = ", ".join(f"{key} = ?" for key in updates.keys())
     values = list(updates.values())
     values.append(job_id)
-    with _connect() as conn:
+    with _with_conn() as conn:
         conn.execute(f"UPDATE jobs SET {columns} WHERE id = ?", values)
+    job = get_job(job_id)
+    if job:
+        _cache_job(job)
 
 
 def mark_running(job_id: str) -> None:
     _update_job(job_id, status="running")
+
+
+def set_input_path(job_id: str, input_path: str) -> None:
+    _update_job(job_id, input_path=input_path)
 
 
 def mark_completed(job_id: str, output_path: str) -> None:
@@ -99,3 +279,95 @@ def mark_completed(job_id: str, output_path: str) -> None:
 
 def mark_failed(job_id: str, error: str) -> None:
     _update_job(job_id, status="failed", error=error)
+
+
+def mark_canceled(job_id: str) -> None:
+    _update_job(job_id, status="canceled", error="Canceled by user")
+
+
+def list_jobs(limit: int = 50, offset: int = 0) -> list[Job]:
+    _ensure_schema()
+    with _with_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+    return [_row_to_job(row) for row in rows]
+
+
+def delete_expired_jobs(days: int = 7) -> int:
+    _ensure_schema()
+    cutoff = _utc_now() - timedelta(days=days)
+    removed = 0
+    with _with_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, input_path, output_path, created_at FROM jobs"
+        ).fetchall()
+        for row in rows:
+            created_at = datetime.fromisoformat(row["created_at"])
+            if created_at >= cutoff:
+                continue
+            preview_path = Path(settings.STORAGE_DIR) / f"{row['id']}_preview.png"
+            for path_value in (row["input_path"], row["output_path"], str(preview_path)):
+                if not path_value:
+                    continue
+                try:
+                    Path(path_value).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            conn.execute("DELETE FROM jobs WHERE id = ?", (row["id"],))
+            removed += 1
+    return removed
+
+
+def delete_failed_jobs(days: int = 1) -> int:
+    _ensure_schema()
+    cutoff = _utc_now() - timedelta(days=days)
+    removed = 0
+    with _with_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, input_path, output_path, created_at FROM jobs WHERE status = 'failed'"
+        ).fetchall()
+        for row in rows:
+            created_at = datetime.fromisoformat(row["created_at"])
+            if created_at >= cutoff:
+                continue
+            preview_path = Path(settings.STORAGE_DIR) / f"{row['id']}_preview.png"
+            for path_value in (row["input_path"], row["output_path"], str(preview_path)):
+                if not path_value:
+                    continue
+                try:
+                    Path(path_value).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            conn.execute("DELETE FROM jobs WHERE id = ?", (row["id"],))
+            removed += 1
+    return removed
+
+
+def get_job_stats() -> dict:
+    _ensure_schema()
+    with _with_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) as count
+            FROM jobs
+            GROUP BY status
+            """
+        ).fetchall()
+    counts = {row["status"]: row["count"] for row in rows}
+    total = sum(counts.values())
+    completed = counts.get("completed", 0)
+    failed = counts.get("failed", 0)
+    queued = counts.get("queued", 0)
+    running = counts.get("running", 0)
+    success_rate = (completed / total) if total else 0.0
+    return {
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "queued": queued,
+        "running": running,
+        "success_rate": round(success_rate, 4),
+    }
+

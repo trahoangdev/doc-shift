@@ -86,3 +86,70 @@ http://127.0.0.1:8000/api/jobs/<job_id>/download
 - WinError 2: chua set `LIBREOFFICE_BINARY` hoac LibreOffice chua cai.
 - Worker loi SIGALRM: da fix, can restart worker sau khi pull.
 - Redis loi: dam bao port 6379 dang mo va dung `REDIS_URL`.
+
+Ghi chu:
+- He thong tu dong don job cu hon 7 ngay (cleanup moi gio).
+- Tuy chon chat luong/DPI/nhung font hien tai chi ap dung cho PDF output.
+
+## 10) Webhook thong bao
+Co the gui webhook khi job hoan thanh/that bai. Gui them form field:
+- `webhook_url`: URL nhan POST JSON
+
+Payload mau:
+```
+{
+  "job_id": "...",
+  "status": "completed|failed",
+  "output_url": "http://localhost:8000/api/jobs/<id>/download",
+  "error": null,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Thong so:
+- Retry 3 lan (1s, 5s, 15s)
+- `PUBLIC_BASE_URL` co the set de tao output_url
+
+## 11) Preview PDF
+Endpoint:
+- `GET /api/jobs/<id>/preview` (chi ho tro PDF)
+
+Can Poppler (pdftoppm). Neu khong trong PATH, set:
+```powershell
+$env:POPPLER_BIN = "C:\poppler\Library\bin"
+```
+
+## 12) Cleanup failed jobs
+- Failed jobs duoc don sau 1 ngay
+- Preview PNG duoc xoa cung luc
+
+## 13) Thong ke co ban
+Endpoint:
+- `GET /api/stats`
+
+Response mau:
+```
+{"total": 10, "completed": 7, "failed": 2, "queued": 1, "running": 0, "success_rate": 0.7}
+```
+
+## 14) Logging
+Backend ghi log JSON (stdout) voi cac truong co ban:
+- `level`, `message`, `time`, `logger`
+- `job_*` (neu co)
+
+## 15) PDF -> DOCX
+Ho tro chuyen doi PDF -> DOCX (LibreOffice). Luu y:
+- PDF scan co the mat layout, can OCR o phien ban sau.
+- Layout phuc tap co the lech.
+
+## 16) PDF -> DOCX (kiem tra text)
+He thong chi ghi log neu PDF co dau hieu la scan, khong chan job.
+
+## 17) Cancel job
+Neu job bi tre (vuot 60s), co the cancel:
+```
+POST /api/jobs/<job_id>/cancel
+```
+Trang thai se chuyen thanh `canceled` va UI se dung polling.
+
