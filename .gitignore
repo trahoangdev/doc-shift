@@ -1,4 +1,5 @@
 ﻿node_modules
+.npm-cache/
 dist
 build
 .vite
@@ -19,4 +20,8 @@ yarn-error.log*
 
 .npm-cache
 frontend/.npm-cache
+
+*.db
+
+dump.rdb
 

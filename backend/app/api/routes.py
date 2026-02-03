@@ -2,12 +2,13 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
-from app.models.jobs import Job, JobCreateResponse, JobStatusResponse
-from app.services.jobs import create_job, get_job
+from app.core.queue import get_queue
+from app.models.jobs import JobCreateResponse, JobStatusResponse
+from app.services.jobs import create_job, get_job, mark_failed
 from app.services.storage import save_upload, build_output_path
 from app.workers.convert_worker import perform_conversion
 
@@ -16,7 +17,6 @@ router = APIRouter()
 
 @router.post("/jobs", response_model=JobCreateResponse)
 async def create_conversion_job(
-    background_tasks: BackgroundTasks,
     output_format: str,
     file: UploadFile = File(...),
 ) -> JobCreateResponse:
@@ -27,7 +27,12 @@ async def create_conversion_job(
     input_path = await save_upload(job.id, file)
     output_path = build_output_path(job.id, output_format)
 
-    background_tasks.add_task(perform_conversion, job.id, input_path, output_path)
+    try:
+        queue = get_queue()
+        queue.enqueue(perform_conversion, job.id, input_path, output_path)
+    except Exception as exc:
+        mark_failed(job.id, str(exc))
+        raise HTTPException(status_code=500, detail="Failed to enqueue job") from exc
     return JobCreateResponse(job_id=job.id)
 
 
