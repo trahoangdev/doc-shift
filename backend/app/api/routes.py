@@ -1,6 +1,9 @@
 ﻿from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import settings
 from app.models.jobs import Job, JobCreateResponse, JobStatusResponse
@@ -38,14 +41,22 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
 
 
 @router.get("/jobs/{job_id}/download")
-async def download_result(job_id: str) -> dict:
+async def download_result(job_id: str) -> FileResponse:
     job = get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not completed")
+    if not job.output_path:
+        raise HTTPException(status_code=404, detail="Output not available")
 
-    return {
-        "download_path": job.output_path,
-        "note": "Stub: replace with signed URL or file streaming",
-    }
+    output_path = Path(job.output_path)
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="Output file missing")
+
+    filename = output_path.name
+    return FileResponse(
+        path=str(output_path),
+        filename=filename,
+        media_type="application/octet-stream",
+    )
