@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ from app.services.storage import save_upload, build_output_path
 from app.workers.convert_worker import perform_conversion
 
 router = APIRouter()
+logger = logging.getLogger("docshift.api")
 
 
 @router.post("/jobs", response_model=JobCreateResponse)
@@ -67,8 +69,20 @@ async def create_conversion_job(
             embed_fonts,
             image_resolution,
         )
+        logger.info(
+            "job_enqueued",
+            extra={
+                "job_id": job.id,
+                "job_output_format": output_format,
+                "job_quality": quality,
+            },
+        )
     except Exception as exc:
         mark_failed(job.id, str(exc))
+        logger.error(
+            "job_enqueue_failed",
+            extra={"job_id": job.id, "job_error": str(exc)},
+        )
         raise HTTPException(status_code=500, detail="Failed to enqueue job") from exc
     return JobCreateResponse(job_id=job.id)
 

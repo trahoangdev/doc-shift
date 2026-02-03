@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -81,7 +82,10 @@ def perform_conversion(
             shutil.move(str(produced), str(output_path_obj))
 
         mark_completed(job_id, output_path)
+        logger.info("job_completed", extra={"job_id": job_id})
         send_webhook(job_id)
     except Exception as exc:  # pragma: no cover - best effort
         mark_failed(job_id, str(exc))
+        logger.error("job_failed", extra={"job_id": job_id, "job_error": str(exc)})
         send_webhook(job_id)
+logger = logging.getLogger("docshift.worker")

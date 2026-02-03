@@ -132,3 +132,8 @@ Response mau:
 ```
 {"total": 10, "completed": 7, "failed": 2, "queued": 1, "running": 0, "success_rate": 0.7}
 ```
+
+## 14) Logging
+Backend ghi log JSON (stdout) voi cac truong co ban:
+- `level`, `message`, `time`, `logger`
+- `job_*` (neu co)
