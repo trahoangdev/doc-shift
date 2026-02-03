@@ -3,13 +3,16 @@
 DocShift is a document format conversion tool focused on layout fidelity.
 
 ## Structure
-- `backend/`: FastAPI API and worker stubs
+- `backend/`: FastAPI API and worker
 - `frontend/`: React app (upload UI scaffold)
+- `docs/`: product and planning docs
 
 ## Backend (dev)
 1. Create venv and install deps: `python -m venv .venv` then `pip install -r backend/requirements.txt`
-2. Run API: `uvicorn app.main:app --reload --app-dir backend`
-3. Health check: `GET http://localhost:8000/health`
+2. Start Redis (docker): `docker compose up -d`
+3. Run API: `uvicorn app.main:app --reload --app-dir backend`
+4. Run worker: `python backend/worker.py`
+5. Health check: `GET http://localhost:8000/health`
 
 ## Frontend (dev)
 1. Install deps: `npm install`
